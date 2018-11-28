@@ -22,7 +22,7 @@ void clear();
 void quizStart();
 void result(char *,int);
 
-char reply[50];
+char reply[50] = {0}; 
 int readcnt=0;//읽은 횟수
 int indexs=0;
 int qsec = 0;///전역변수
@@ -53,8 +53,7 @@ void add(char *str)
 
 void handler()
 {
-	printf("시간이 초과되었습니다.");
-	printf("다음 문제로 넘어갑니다.");
+	printf(" ");
 }
 
 void clear()
@@ -66,24 +65,27 @@ void clear()
 }
 
 void quizStart()
-{   struct itimerval it;
+{  
+	struct itimerval it;
 	sigset(SIGALRM, handler);
-	it.it_value.tv_sec = 15;
+
+	it.it_value.tv_sec = 15;// 시그널 15초 지정 
 	it.it_value.tv_usec = 0;
 	it.it_interval.tv_sec;
 	it.it_interval.tv_usec = 0;
+
 	pid_t pid;
 	char * name;
-	name = getlogin();
+	name = getlogin();// userid 캻져오기 �
 
+    int correct = 0;
+	int cnt = 0;
+	for(cnt; cnt<indexs; cnt++)
+	{
 	if (setitimer(ITIMER_REAL, &it, (struct itimerval *)NULL) == -1) {
 		perror("setitimer");
 		exit(1);
 	}
-    int correct = 0;
-	int cnt = 0;
-	for(cnt; cnt<readcnt; cnt++)
-	{
 		if (getitimer(ITIMER_REAL, &it) == -1) {
 			perror("getitimer");
 			exit(1);
@@ -92,20 +94,40 @@ void quizStart()
 		printf("%d번 문제 : %s\n",cnt+1,questions[cnt].p);
 		printf("답 : %s",questions[cnt].r);
 		scanf("%s",reply);
-		if(strncmp(questions[cnt].r,reply,2)==0) //만약 답과 답이 같다면 정답
+		if(strncmp(questions[cnt].r,reply,strlen(questions[cnt].r)-1)==0) //만약 답과 답이 같다면 정답
 		{ 
 			printf("정답 입니다.\n");
+			if(cnt!=indexs-1)
+			{
 			printf("다음 문제로 넘어갑니다.\n");
+			}
+			else
+			{
+				printf("시험이 끝났습니다.\n");// 마지막 문제라면 출력
+			}
+
 			correct++;
-			qsec=0;
+			fflush(stdin);
 			continue;
 		}
-		else
+		else if(strcmp(reply,"z")==0)
+		{
+			printf("시간 초과입니다.\n");
+		    fflush(stdin);
+		}
+
+		else if(strlen(reply)>1)
 		{
 			printf("오답 입니다.\n");
 			printf("다음 문제로 넘어갑니다.\n");
-			qsec=0;
+			fflush(stdin);
 			continue;
+		}
+	
+		else
+		{
+			printf("시간 초과입니다.\n");
+		    fflush(stdin);
 		}
 	}
 
@@ -115,10 +137,21 @@ void quizStart()
 
 }
 
+char *output[] = {
+	"%G년 %m월 %d일 %H:%M" };
+
 void result(char *name, int correct)
 {
-	printf("이름 : %s  정답 갯수 : %d/%d\n",name,correct,readcnt);
-
+	struct tm *tm;
+	int n;
+	time_t tt;
+	time(&tt);
+	char buf[257];
+	tm = localtime(&tt);
+	strftime(buf,sizeof(buf),output[0],tm);
+	printf("%s 이름 : %s  정답 갯수 : %d/%d\n",buf,name,correct,indexs);
+    
+	FILE *fp;
 	int fd; 
 	mode_t mode;
 
@@ -129,18 +162,20 @@ void result(char *name, int correct)
 		perror("result.txt");
 		exit(1);
 	}
-	else
-		printf("결과가 기록되었습니다.");
+	fp = fdopen(fd,"a+");
+	fprintf(fp,"이름 : %d 정답 갯수 : %d/%d\n",name,correct,indexs);
+	fclose(fp);
 
-	close(fd);
 
-	return 0;
+	printf("결과가 기록되었습니다.\n");
 
+
+    return ;
 }
 
 void questionAdd(char *file)
 {
-    int fd
+    int fd;
 	char problem[50];
 	char reply[50];
 		
@@ -156,19 +191,19 @@ void questionAdd(char *file)
 	printf("문제를 입력하세요 :");
 	scanf("%s",problem);
 	printf("정답을 입력하세요 :");
-	sacnf("%s",reply);
+	scanf("%s",reply);
 
-    if(write(fd, problem, 50) != 50) 
+    if(write(fd, problem, 50) < 0 ) 
 	{
 		perror("Write");
 	}
 
-	if(write(fd, reply, 50) != 50)
+	if(write(fd, reply, 50) < 0 )
 	{
 		perror("Write");
 	}
 
-		printf("문제가 추가 되었습니다.");
+		printf("문제가 추가 되었습니다.\n");
 
 	close(fd);
 	
