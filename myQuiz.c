@@ -20,17 +20,19 @@ void add(char *);
 void handler();
 void clear();
 void quizStart();
-void result(char *,int);
+void result(char *,int,char *);
 
 char reply[50] = {0}; 
+int sig = 0; //시간 초과를 확인하기 위한 변수
+int fin = 0; // 한문제가 종료되었음을 확인하는 변수
 int readcnt=0;//읽은 횟수
 int indexs=0;
 int qsec = 0;///전역변수
 question questions[300];// 문제들을 저장하기 위한 question 구조체 배열
 
-void readfile()
+void readfile(char *filename)
 {
-	FILE *fp = fopen("ls.txt","r");
+	FILE *fp = fopen(filename,"r");
 	char str[200];
 	while(fgets(str, 200, fp) != NULL) {//한줄씩 끊어서 저장하기위해 fgets를 사용
 		add(str);//add함수를 이용해 구조체에 저장
@@ -53,175 +55,207 @@ void add(char *str)
 
 void handler()
 {
-	printf(" ");
+	sig = 1;
+	printf("\a");
 }
 
 void clear()
 {
+	pid_t pid;
+	int status;
+
+	switch( pid = fork() ) {
+		case -1 :
+			perror("fork");
+			exit(1);
+			break;
+		case 0 :
 	if(execlp("clear","clear",(char *)NULL) == -1) {
 		perror("execlp");
 		exit(1);
+		break;
+		default :
+		while (wait(&status) != pid)
+			continue;
+	}
 	}
 }
 
-void quizStart()
+void quizStart(char *filename)
 {  
 	struct itimerval it;
 	sigset(SIGALRM, handler);
 
-	it.it_value.tv_sec = 15;// 시그널 15초 지정 
+	it.it_value.tv_sec = 10;// 시그널 10초 지정 
 	it.it_value.tv_usec = 0;
 	it.it_interval.tv_sec;
 	it.it_interval.tv_usec = 0;
 
-	pid_t pid;
-	char * name;
-	name = getlogin();// userid 캻져오기 �
 
-    int correct = 0;
+	char * name;
+	name = getlogin();// userid 
+
+	int correct = 0;
 	int cnt = 0;
+	clear();
+
 	for(cnt; cnt<indexs; cnt++)
 	{
-	if (setitimer(ITIMER_REAL, &it, (struct itimerval *)NULL) == -1) {
-		perror("setitimer");
-		exit(1);
-	}
+		sig = 0;
+		if (setitimer(ITIMER_REAL, &it, (struct itimerval *)NULL) == -1) {
+			perror("setitimer");
+			exit(1);
+		}
 		if (getitimer(ITIMER_REAL, &it) == -1) {
 			perror("getitimer");
 			exit(1);
 		}
-
+        printf("****************************************\n");
 		printf("%d번 문제 : %s\n",cnt+1,questions[cnt].p);
 		printf("답 : %s",questions[cnt].r);
 		scanf("%s",reply);
+		printf("***************************************\n");
 		if(strncmp(questions[cnt].r,reply,strlen(questions[cnt].r)-1)==0) //만약 답과 답이 같다면 정답
 		{ 
 			printf("정답 입니다.\n");
-			if(cnt!=indexs-1)
+			if(cnt!=indexs-1)// 만약 마지막 문제가 아니라면 출력한다.
 			{
-			printf("다음 문제로 넘어갑니다.\n");
+				printf("다음 문제로 넘어갑니다.\n");
+					
 			}
 			else
 			{
 				printf("시험이 끝났습니다.\n");// 마지막 문제라면 출력
 			}
 
-			correct++;
-			fflush(stdin);
-			continue;
+			correct++;// 맞은 갯수 증가
+			sleep(1);
+			clear();
 		}
-		else if(strcmp(reply,"z")==0)
+		else if(sig==1)//위에 핸들러 함수보면, signal 발생시 sig = 1 하도록 구현
 		{
 			printf("시간 초과입니다.\n");
-		    fflush(stdin);
+			if(cnt!=indexs-1)
+			{
+			printf("다음 문제로 넘어갑니다.\n");
+			}
+			sleep(1);
+			clear();
+			
 		}
 
-		else if(strlen(reply)>1)
+		else 
 		{
 			printf("오답 입니다.\n");
+			if(cnt!=indexs-1)
+			{
 			printf("다음 문제로 넘어갑니다.\n");
-			fflush(stdin);
-			continue;
+			}
+			sleep(1);
+			clear();
+
 		}
-	
-		else
-		{
-			printf("시간 초과입니다.\n");
-		    fflush(stdin);
-		}
+
 	}
 
-	result(name,correct);
+	result(name,correct,filename);
 
-	
+
 
 }
 
 char *output[] = {
 	"%G년 %m월 %d일 %H:%M" };
 
-void result(char *name, int correct)
+void result(char *name, int correct, char *filename)
 {
 	struct tm *tm;
 	int n;
+
 	time_t tt;
 	time(&tt);
 	char buf[257];
 	tm = localtime(&tt);
 	strftime(buf,sizeof(buf),output[0],tm);
 	printf("%s 이름 : %s  정답 갯수 : %d/%d\n",buf,name,correct,indexs);
-    
+
 	FILE *fp;
-	int fd; 
-	mode_t mode;
-
-	mode = S_IRWXU;
-
-	fd = open("result.txt",O_CREAT|O_APPEND,mode);
-	if (fd == -1) {
-		perror("result.txt");
+	if((fp= fopen("result.txt","a+")) == NULL) {
+		perror(name);
 		exit(1);
 	}
-	fp = fdopen(fd,"a+");
-	fprintf(fp,"이름 : %d 정답 갯수 : %d/%d\n",name,correct,indexs);
-	fclose(fp);
 
+	fprintf(fp,"%s 문제 종류 : %s 이름 : %s 정답 갯수 : %d/%d\n",buf,filename,name,correct,indexs);
+	fclose(fp);
 
 	printf("결과가 기록되었습니다.\n");
 
-
-    return ;
+	return;
 }
 
 void questionAdd(char *file)
 {
-    int fd;
-	char problem[50];
-	char reply[50];
-		
-	mode_t mode;
+	FILE *fp;
+	char problem[500];
+	char reply[500];
 
-	mode = S_IRWXU;
 
-	fd = open(file,O_CREAT|O_APPEND,mode);
-	if (fd == -1) {
+    if ((fp = fopen(file,"a+")) == NULL) {
 		perror(file);
 		exit(1);
 	}
-	printf("문제를 입력하세요 :");
+	while(1)
+	{
+	printf("문제를 입력하세요(종료하려면 q 입력) :");
 	scanf("%s",problem);
+
+	if(problem[0]=='q')
+		exit(1);
+	fflush(stdin);
+
 	printf("정답을 입력하세요 :");
 	scanf("%s",reply);
+	fflush(stdin);
 
-    if(write(fd, problem, 50) < 0 ) 
-	{
-		perror("Write");
+	fprintf(fp,"%s\n%s\n",problem,reply);
+
+
+	printf("문제가 추가 되었습니다.\n");
 	}
 
-	if(write(fd, reply, 50) < 0 )
-	{
-		perror("Write");
-	}
+	fclose(fp);
 
-		printf("문제가 추가 되었습니다.\n");
+	return ;
 
-	close(fd);
-	
+
 
 }
-		
+
 
 int main(int argc,char *argv[])
 {
-	if(*argv[1] == '-' && *(argv[1] + 1) == 'q' ) {
-		readfile();
-		quizStart();
-    }
-	else if(*argv[1] == '-' && *(argv[1] + 1) == 'a') {
-		questionAdd(argv[2]);
+	int n;
+	extern char *optarg;
+	extern int optind;
+
+	while ((n = getopt(argc,argv,"a:q:")) != -1) {
+		switch (n) {
+			case 'a':
+				questionAdd(optarg);
+				break;
+			case 'q':
+				readfile(optarg);
+				quizStart(optarg);
+				break;
+			default :
+				printf("Quiz Option : ");
+		}
 	}
 
+
+
+
 	return 0;
-		
+
 
 }
