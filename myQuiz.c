@@ -194,7 +194,7 @@ void quizStart(char *filename)//퀴즈 시작 함수
 				exit(1);
 			}
 
-			fprintf(wfp, "%s%s",questions[cnt].p,questions[cnt].r);
+			fprintf(wfp, "%s%s",questions[ran].p,questions[ran].r);
 			xnum++;
 			if(cnt!=indexs-1)
 			{
@@ -214,7 +214,7 @@ void quizStart(char *filename)//퀴즈 시작 함수
 				exit(1);
 			}
 
-			fprintf(wfp, "%s%s",questions[cnt].p,questions[cnt].r);
+			fprintf(wfp, "%s%s",questions[ran].p,questions[ran].r);
 			xnum++;
 
 			if(cnt!=indexs-1)
